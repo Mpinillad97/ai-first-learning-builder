@@ -4,6 +4,9 @@ import { ANALYSIS_ID_PATTERN, analysisRepository } from '../repositories/analysi
 import { documentRepository } from '../repositories/document.repository.js';
 import { extractionRepository } from '../repositories/extraction.repository.js';
 import { PROPOSAL_ID_PATTERN, proposalRepository } from '../repositories/proposal.repository.js';
+import { reviewRepository } from '../repositories/review.repository.js';
+import type { ReviewStatus } from '../types/review.types.js';
+import { reviewStatusOf } from './review.service.js';
 import type { Analysis, AnalysisErrorCode, Claim } from '../types/analysis.types.js';
 import {
   PROPOSAL_SCHEMA_VERSION,
@@ -261,6 +264,77 @@ function assemble(
     validationErrors: [],
     error: null,
   };
+}
+
+/** Lightweight listing entry; the full record is retrieved with GET /api/proposals/:proposalId. */
+export interface ProposalSummary {
+  proposalId: string;
+  analysisId: string;
+  documentId: string;
+  extractionId: string;
+  status: LearningProposal['status'];
+  /** E4.5 (additive): effective human review status from the review log; "unavailable" if the log cannot be read. */
+  reviewStatus: ReviewStatus | 'unavailable';
+  model: string;
+  promptVersion: string;
+  createdAt: string;
+  completedAt: string;
+  /** null for failed attempts (no content). */
+  title: string | null;
+  counts: {
+    modules: number;
+    lessons: number;
+    activities: number;
+    assessments: number;
+    warnings: number;
+    rejectedItems: number;
+    validationErrors: number;
+  };
+  error: LearningProposal['error'];
+}
+
+/** All persisted proposals of an analysis, newest first (including failed attempts). */
+export async function listAnalysisProposals(analysisId: string): Promise<ProposalSummary[]> {
+  if (!ANALYSIS_ID_PATTERN.test(analysisId)) throw new HttpError(400, 'Malformed analysis id.');
+  if (!(await analysisRepository.findById(analysisId))) throw new HttpError(404, 'Analysis not found.');
+  const proposals = await proposalRepository.findByAnalysisId(analysisId);
+  const reviewStatuses = new Map<string, ProposalSummary['reviewStatus']>();
+  for (const p of proposals) {
+    try {
+      reviewStatuses.set(p.proposalId, reviewStatusOf(p, await reviewRepository.findByProposalId(p.proposalId)));
+    } catch (error) {
+      console.error(`[proposals] Review log of proposal ${p.proposalId} is unreadable`, error);
+      reviewStatuses.set(p.proposalId, 'unavailable'); // never guess an approval state
+    }
+  }
+  return proposals
+    .map((p) => {
+      const modules = p.content?.modules ?? [];
+      return {
+        proposalId: p.proposalId,
+        analysisId: p.analysisId,
+        documentId: p.documentId,
+        extractionId: p.extractionId,
+        status: p.status,
+        reviewStatus: reviewStatuses.get(p.proposalId)!,
+        model: p.model,
+        promptVersion: p.promptVersion,
+        createdAt: p.createdAt,
+        completedAt: p.completedAt,
+        title: p.content?.title ?? null,
+        counts: {
+          modules: modules.length,
+          lessons: modules.reduce((n, m) => n + m.lessons.length, 0),
+          activities: modules.reduce((n, m) => n + m.activities.length, 0),
+          assessments: modules.reduce((n, m) => n + m.assessments.length, 0),
+          warnings: p.warnings.length,
+          rejectedItems: p.rejectedItems.length,
+          validationErrors: p.validationErrors.length,
+        },
+        error: p.error,
+      };
+    })
+    .sort((x, y) => y.createdAt.localeCompare(x.createdAt) || y.completedAt.localeCompare(x.completedAt));
 }
 
 export async function getProposal(proposalId: string): Promise<LearningProposal> {

@@ -402,6 +402,56 @@ export async function analyzeDocument(
   return analysis;
 }
 
+/** Lightweight listing entry; the full record is retrieved with GET /api/analyses/:analysisId. */
+export interface AnalysisSummary {
+  analysisId: string;
+  documentId: string;
+  extractionId: string;
+  /** 1 for E3.1 analyses (no contradiction/gap detection), 2 since E3.2. */
+  schemaVersion: number;
+  status: Analysis['status'];
+  model: string;
+  createdAt: string;
+  completedAt: string;
+  counts: {
+    claims: number;
+    confirmed: number;
+    pendingValidation: number;
+    rejectedClaims: number;
+    /** null when the analysis version did not detect them. */
+    contradictions: number | null;
+    documentationGaps: number | null;
+  };
+  error: Analysis['error'];
+}
+
+/** All persisted analyses of a document, newest first (including failed attempts). */
+export async function listDocumentAnalyses(documentId: string): Promise<AnalysisSummary[]> {
+  if (!(await documentRepository.findById(documentId))) throw new HttpError(404, 'Document not found.');
+  const analyses = await analysisRepository.findByDocumentId(documentId);
+  return analyses
+    .map((a) => ({
+      analysisId: a.analysisId,
+      documentId: a.documentId,
+      extractionId: a.extractionId,
+      schemaVersion: a.schemaVersion ?? 1,
+      status: a.status,
+      model: a.model,
+      createdAt: a.createdAt,
+      completedAt: a.completedAt,
+      counts: {
+        claims: a.claims.length,
+        confirmed: a.claims.filter((c) => c.status === 'confirmed').length,
+        pendingValidation: a.claims.filter((c) => c.status === 'pending_validation').length,
+        rejectedClaims: a.rejectedClaims.length,
+        contradictions: a.contradictions?.length ?? null,
+        documentationGaps: a.documentationGaps?.length ?? null,
+      },
+      error: a.error,
+    }))
+    .sort((x, y) => y.createdAt.localeCompare(x.createdAt) || y.completedAt.localeCompare(x.completedAt));
+}
+
 export async function getAnalysis(analysisId: string): Promise<Analysis> {
   if (!ANALYSIS_ID_PATTERN.test(analysisId)) throw new HttpError(400, 'Malformed analysis id.');
   const analysis = await analysisRepository.findById(analysisId);

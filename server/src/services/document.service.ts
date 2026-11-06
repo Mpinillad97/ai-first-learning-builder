@@ -113,6 +113,15 @@ export async function uploadDocument(file: UploadedFile): Promise<DocumentRecord
   }
 }
 
+/**
+ * Compensation for a just-uploaded document whose follow-up step failed (e.g. linking it to a project):
+ * removes its metadata record and its stored file. Never used for documents that were already in use.
+ */
+export async function discardUploadedDocument(document: DocumentRecord): Promise<void> {
+  await documentRepository.delete(document.id);
+  await rm(path.join(storage.storageDir, ...document.storagePath.split('/')), { force: true });
+}
+
 export function listDocuments(): Promise<DocumentRecord[]> {
   return documentRepository.findAll();
 }

@@ -8,7 +8,7 @@ An AI-First Learning Builder that turns authorized product documentation into st
 
 | Layer       | Technology                              |
 | ----------- | --------------------------------------- |
-| Frontend    | React, TypeScript, Vite                 |
+| Frontend    | React, TypeScript, Vite, Tailwind CSS 4 |
 | Backend     | Node.js, Express, TypeScript            |
 | AI          | OpenAI API (backend only)               |
 | Persistence | Local JSON files, local document storage |
@@ -86,9 +86,15 @@ cp .env.example .env    # then set OPENAI_API_KEY
 
 Variables set in the shell override `.env`. Without `OPENAI_API_KEY` the rest of the API works normally and AI analysis requests respond `503`.
 
+### Projects and documents
+
+- `POST /api/projects` creates a project (`name` and `product` required; `audience`, `learningObjective`, `context` optional). `GET /api/projects` lists them (newest first); `GET /api/projects/:id` returns one. Projects are stored in `server/data/projects.json`.
+- `POST /api/projects/:id/documents` uploads a PDF/DOCX (multipart field `file`, same rules as `POST /api/documents`: max 15 MB) and links it to the project; unknown projects are rejected before the file is read. `GET /api/projects/:id/documents` lists the project's documents in upload order.
+- Uploading never starts processing. The project-document link is stored in `project.documentIds`; document metadata is unchanged.
+
 ### AI claim analysis
 
-`POST /api/documents/:id/analyses` sends the document's current extraction to OpenAI and stores the extracted factual claims with verified evidence. `GET /api/analyses/:analysisId` returns a stored analysis.
+`POST /api/documents/:id/analyses` sends the document's current extraction to OpenAI and stores the extracted factual claims with verified evidence. `GET /api/analyses/:analysisId` returns a stored analysis, and `GET /api/documents/:id/analyses` lists a document's persisted analyses (summaries, newest first, failed attempts included).
 
 - Every claim cites one or more `sourceId`s with an exact quotation. The backend resolves each source, verifies the quotation occurs exactly once in the fragment text and computes `startOffset`/`endOffset` itself (UTF-16 code units, start inclusive, end exclusive). Claims with unverifiable evidence are kept under `rejectedClaims` for audit and never treated as verified.
 - Classifications: `confirmed` (directly stated, verified evidence), `pending_validation` (requires human validation) and `not_documented` (used only by documentation gaps: the documentation does not establish something; this never means the capability does not exist). The backend only ever downgrades a claim, never promotes it: claims involved in a contradiction, or stating automation, skipped review or guarantees, become `pending_validation`; claims stating figures or such capabilities that their quotations do not contain are rejected (`unsupported_detail`, `overreach`).
@@ -99,7 +105,7 @@ Variables set in the shell override `.env`. Without `OPENAI_API_KEY` the rest of
 
 ### Learning proposals
 
-`POST /api/analyses/:analysisId/proposals` turns a completed analysis (`schemaVersion: 2`) into a draft learning experience; `GET /api/proposals/:proposalId` returns it. The document is not analyzed again.
+`POST /api/analyses/:analysisId/proposals` turns a completed analysis (`schemaVersion: 2`) into a draft learning experience; `GET /api/proposals/:proposalId` returns it, and `GET /api/analyses/:analysisId/proposals` lists an analysis' persisted proposals (summaries, newest first, failed attempts included). The document is not analyzed again.
 
 - Input to the model: the analysis' confirmed and pending claims (with their verified quotations, re-verified against the extraction first), contradictions and documentation gaps.
 - A proposal has a learning objective, audience, prerequisites and estimated duration (each `supported` by confirmed claims or explicitly `pending_validation`), and ordered modules with lessons, activities and assessments.
@@ -107,6 +113,19 @@ Variables set in the shell override `.env`. Without `OPENAI_API_KEY` the rest of
 - Every contradiction, documentation gap and pending claim of the analysis is carried over into `warnings` (all `requiresHumanReview: true`); related content is marked `requiresReview`.
 - Source references and per-module evidence are derived by the backend from the analysis, never taken from the model.
 - Generated proposals always have status `draft`; there is no approval or publication. Failed attempts are recorded with status `failed` and no content. Each proposal is an immutable file in `server/data/proposals/<proposalId>.json`.
+
+### Human review
+
+Proposals are approved or rejected only through an explicit human decision. Decisions are stored in an append-only review log, separate from the proposal (which is never modified): `server/data/reviews/<proposalId>/<reviewId>.json`.
+
+- `POST /api/proposals/:proposalId/reviews` records a decision: `{ decision: "approved" | "rejected", reason?, comment?, acknowledgedWarnings?, basedOnReviewId }`.
+  - A rejection requires a `reason`.
+  - Approving a proposal with warnings or pending-validation content requires `acknowledgedWarnings: true`.
+  - Failed generation attempts (critical validation errors) cannot be approved or rejected (`409`).
+  - `basedOnReviewId` must be the latest decision the reviewer saw (`null` if none); otherwise `409`, so a stale view can never overwrite someone else's decision. Repeating the current decision is also `409`.
+- `GET /api/proposals/:proposalId/reviews` returns `{ reviewStatus, reviews }` (newest first). `reviewStatus` is `pending_review`, `approved`, `rejected` or `not_reviewable`.
+- `GET /api/analyses/:analysisId/proposals` summaries include `reviewStatus` (`"unavailable"` if a review log cannot be read; an approval state is never guessed).
+- There is no publication and no automatic approval.
 
 ### Local storage
 

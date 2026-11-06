@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { storage } from '../config/storage.js';
 import type { Analysis } from '../types/analysis.types.js';
@@ -83,6 +83,32 @@ export class AnalysisRepository {
       throw new AnalysisRepositoryError(`Analysis "${filePath}" is invalid: ${errors.join('; ')}. The file was left unchanged.`);
     }
     return parsed as Analysis;
+  }
+
+  /**
+   * Every readable analysis of a document (any status, any schema version). Files that fail validation are
+   * skipped and logged instead of hiding the rest; they are never modified.
+   */
+  async findByDocumentId(documentId: string): Promise<Analysis[]> {
+    let names: string[];
+    try {
+      names = await readdir(this.dir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw new AnalysisRepositoryError(`Failed to list analyses in "${this.dir}"`, { cause: error });
+    }
+    const analyses: Analysis[] = [];
+    for (const name of names) {
+      const analysisId = name.endsWith('.json') ? name.slice(0, -5) : '';
+      if (!ANALYSIS_ID_PATTERN.test(analysisId)) continue; // temp files and unrelated entries
+      try {
+        const analysis = await this.findById(analysisId);
+        if (analysis?.documentId === documentId) analyses.push(analysis);
+      } catch (error) {
+        console.error(`[analyses] Skipping unreadable analysis ${analysisId} while listing document ${documentId}`, error);
+      }
+    }
+    return analyses;
   }
 
   private pathFor(analysisId: string): string {

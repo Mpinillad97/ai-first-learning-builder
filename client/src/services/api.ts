@@ -59,4 +59,24 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
 export const api = {
   get: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: 'GET' }),
+  /** JSON body. */
+  post: <T>(path: string, body: unknown, init?: RequestInit) =>
+    request<T>(path, { ...init, method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', ...init?.headers } }),
+  /** multipart/form-data body; the browser sets the boundary header. */
+  postForm: <T>(path: string, form: FormData, init?: RequestInit) => request<T>(path, { ...init, method: 'POST', body: form }),
+}
+
+/** A user-facing description of an API failure: a Spanish summary for unreachable APIs, else the backend message. */
+export function errorDetail(error: unknown): string {
+  if (isUnreachable(error)) return 'No se pudo conectar con el servidor. Verifica que la API esté en ejecución.'
+  return error instanceof Error && error.message ? error.message : 'Error desconocido.'
+}
+
+/**
+ * True when the API could not be reached: no HTTP response at all, or a 502/504 without a backend error body
+ * (the dev proxy's answer when the backend is down; backend errors always carry a JSON message).
+ */
+export function isUnreachable(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false
+  return error.status === 0 || ((error.status === 502 || error.status === 504) && error.message === `Request failed with status ${error.status}`)
 }

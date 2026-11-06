@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { storage } from '../config/storage.js';
 import type { LearningProposal } from '../types/proposal.types.js';
@@ -74,6 +74,29 @@ export class ProposalRepository {
       throw new ProposalRepositoryError(`Proposal "${filePath}" is invalid: ${errors.join('; ')}. The file was left unchanged.`);
     }
     return parsed as LearningProposal;
+  }
+
+  /** Every readable proposal generated from an analysis. Invalid files are skipped and logged, never modified. */
+  async findByAnalysisId(analysisId: string): Promise<LearningProposal[]> {
+    let names: string[];
+    try {
+      names = await readdir(this.dir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw new ProposalRepositoryError(`Failed to list proposals in "${this.dir}"`, { cause: error });
+    }
+    const proposals: LearningProposal[] = [];
+    for (const name of names) {
+      const proposalId = name.endsWith('.json') ? name.slice(0, -5) : '';
+      if (!PROPOSAL_ID_PATTERN.test(proposalId)) continue;
+      try {
+        const proposal = await this.findById(proposalId);
+        if (proposal?.analysisId === analysisId) proposals.push(proposal);
+      } catch (error) {
+        console.error(`[proposals] Skipping unreadable proposal ${proposalId} while listing analysis ${analysisId}`, error);
+      }
+    }
+    return proposals;
   }
 
   private pathFor(proposalId: string): string {

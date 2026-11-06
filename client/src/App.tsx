@@ -1,48 +1,50 @@
-import { useBackendHealth, type ConnectionState } from './hooks/useBackendHealth'
-import './App.css'
+import { useEffect, useRef, type ComponentType } from 'react'
+import { AppShell } from './components/AppShell'
+import { DEFAULT_PATH, NAVIGATION, PRODUCT_NAME, SECTIONS } from './navigation'
+import { DocumentAnalysisPage } from './pages/DocumentAnalysisPage'
+import { LearningGeneratorPage } from './pages/LearningGeneratorPage'
+import { NewProjectPage } from './pages/NewProjectPage'
+import { NotFoundPage } from './pages/NotFoundPage'
+import { ReviewPage } from './pages/ReviewPage'
+import { UpdatesPage } from './pages/UpdatesPage'
+import { navigate, usePathname } from './router'
 
-const STATUS_LABEL: Record<ConnectionState, string> = {
-  loading: 'Checking…',
-  connected: 'Connected',
-  disconnected: 'Disconnected',
+const PAGES: Record<string, ComponentType> = {
+  [SECTIONS.newProject.path]: NewProjectPage,
+  [SECTIONS.analysis.path]: DocumentAnalysisPage,
+  [SECTIONS.generator.path]: LearningGeneratorPage,
+  [SECTIONS.review.path]: ReviewPage,
+  [SECTIONS.updates.path]: UpdatesPage,
 }
 
+/** Normalizes a trailing slash so "/actualizaciones/" matches "/actualizaciones". */
+const normalize = (path: string) => (path.length > 1 ? path.replace(/\/+$/, '') : path)
+
 function App() {
-  const { state, message, lastChecked, checking, recheck } = useBackendHealth()
+  const pathname = normalize(usePathname())
 
-  return (
-    <main className="app">
-      <header className="app-header">
-        <h1>AI-First Learning Builder</h1>
-        <p className="subtitle">Technical integration check</p>
-      </header>
+  useEffect(() => {
+    if (pathname === '/') navigate(DEFAULT_PATH, { replace: true })
+  }, [pathname])
 
-      <section className="status-card" aria-labelledby="backend-status-title">
-        <div className="status-card__header">
-          <h2 id="backend-status-title">Backend connection</h2>
-          <span className={`status-badge status-badge--${state}`} role="status" aria-live="polite">
-            <span className="status-dot" aria-hidden="true" />
-            {STATUS_LABEL[state]}
-          </span>
-        </div>
+  useEffect(() => {
+    const section = NAVIGATION.find((s) => s.path === pathname)
+    document.title = section ? `${section.label} · ${PRODUCT_NAME}` : `Página no encontrada · ${PRODUCT_NAME}`
+  }, [pathname])
 
-        <dl className="status-details">
-          <dt>Endpoint</dt>
-          <dd>
-            <code>GET /api/health</code>
-          </dd>
-          <dt>Response</dt>
-          <dd data-testid="status-message">{message}</dd>
-          <dt>Last checked</dt>
-          <dd>{lastChecked ? lastChecked.toLocaleTimeString() : '—'}</dd>
-        </dl>
+  // On client-side navigation (not on first load), scroll to top and move focus to the new page title.
+  const firstRender = useRef(true)
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    window.scrollTo(0, 0)
+    document.getElementById('page-title')?.focus({ preventScroll: true })
+  }, [pathname])
 
-        <button type="button" className="button" onClick={recheck} disabled={checking}>
-          {checking ? 'Checking…' : 'Check again'}
-        </button>
-      </section>
-    </main>
-  )
+  const Page = PAGES[pathname] ?? (pathname === '/' ? null : NotFoundPage)
+  return <AppShell pathname={pathname}>{Page && <Page />}</AppShell>
 }
 
 export default App
