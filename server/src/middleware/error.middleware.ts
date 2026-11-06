@@ -7,7 +7,10 @@ interface ErrorResponseBody {
   };
 }
 
-/** Error with an HTTP status. 4xx messages are sent to the client, so keep them safe and user-facing. */
+/**
+ * Error with an HTTP status whose message is always sent to the client (including 5xx such as 502/503/504),
+ * so it must be safe and user-facing. Never put provider details, paths or stack traces in it.
+ */
 export class HttpError extends Error {
   readonly status: number;
 
@@ -49,9 +52,10 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   const status = getStatus(err);
   console.error(`[error] ${req.method} ${req.originalUrl} -> ${status}`, err);
 
-  // Only client errors (4xx) get a descriptive message; server errors stay generic.
-  const message =
-    status < 500 && err instanceof Error && err.message ? err.message : 'Internal Server Error';
+  // Client errors (4xx) and deliberately constructed HttpErrors get their message; any other server error
+  // (unexpected exceptions, storage or library errors) stays generic.
+  const exposeMessage = err instanceof HttpError || status < 500;
+  const message = exposeMessage && err instanceof Error && err.message ? err.message : 'Internal Server Error';
 
   res.status(status).json(errorBody(status, message));
 };

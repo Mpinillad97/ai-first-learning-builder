@@ -1,9 +1,5 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-// Resolved from this module's own location, not process.cwd(). This file sits two levels below
-// the server root both as source (src/config/storage.ts) and compiled (dist/config/storage.js).
-const serverRoot = fileURLToPath(new URL('../../', import.meta.url));
+import { serverRoot } from './paths.js';
 
 const dataDir = path.join(serverRoot, 'data');
 const storageDir = path.join(serverRoot, 'storage');
@@ -17,8 +13,12 @@ export interface StorageConfig {
   originalsDir: string;
   /** JSON collection of document metadata. */
   documentsFile: string;
-  /** One JSON file per document with its extracted text: <documentId>.json. */
+  /** Extraction history per document (see extraction.repository.ts). */
   extractionsDir: string;
+  /** One immutable JSON file per claim analysis: <analysisId>.json. */
+  analysesDir: string;
+  /** One immutable JSON file per learning proposal: <proposalId>.json. */
+  proposalsDir: string;
 }
 
 export const storage: StorageConfig = {
@@ -27,4 +27,6 @@ export const storage: StorageConfig = {
   originalsDir: path.join(storageDir, 'originals'),
   documentsFile: path.join(dataDir, 'documents.json'),
   extractionsDir: path.join(dataDir, 'extractions'),
+  analysesDir: path.join(dataDir, 'analyses'),
+  proposalsDir: path.join(dataDir, 'proposals'),
 };
