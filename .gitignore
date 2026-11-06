@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# Environment files (keep the example template)
+.env
+.env.*
+!.env.example
+*.local
+
+# Local storage data (JSON persistence and uploaded documents)
+server/data/
+server/storage/
+server/uploads/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
