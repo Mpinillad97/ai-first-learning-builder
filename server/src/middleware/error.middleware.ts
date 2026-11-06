@@ -7,6 +7,17 @@ interface ErrorResponseBody {
   };
 }
 
+/** Error with an HTTP status. 4xx messages are sent to the client, so keep them safe and user-facing. */
+export class HttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
+  }
+}
+
 function errorBody(status: number, message: string): ErrorResponseBody {
   return { error: { status, message } };
 }
