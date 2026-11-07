@@ -38,7 +38,7 @@ export const SECTIONS = {
   updates: {
     path: '/actualizaciones',
     label: 'Actualizaciones',
-    description: 'Detecta nuevas versiones de la documentación y analiza su impacto en el contenido existente.',
+    description: 'Gestiona versiones de documentos, analiza su impacto y actualiza el contenido de aprendizaje con aprobación humana.',
     icon: RefreshIcon,
   },
 } as const satisfies Record<string, SectionDefinition>

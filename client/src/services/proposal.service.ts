@@ -85,6 +85,8 @@ export interface LearningProposal {
   rejectedItems: { location: string; kind: string; text: string; reasons: string[] }[]
   validationErrors: string[]
   error: { code: string; message: string } | null
+  /** E5.3: only on versions produced by a learning update. */
+  lineage?: { rootProposalId: string; parentProposalId: string; proposalVersion: number; updateId: string; impactAnalysisId: string }
 }
 
 export interface ProposalSummary {
@@ -97,6 +99,8 @@ export interface ProposalSummary {
   createdAt: string
   completedAt: string
   title: string | null
+  /** E5.3: 1 for proposals generated from an analysis; 2, 3, ... for approved learning updates. */
+  proposalVersion?: number
   counts: { modules: number; lessons: number; activities: number; assessments: number; warnings: number; rejectedItems: number; validationErrors: number }
   error: { code: string; message: string } | null
 }

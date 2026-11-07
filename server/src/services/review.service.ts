@@ -91,10 +91,21 @@ function serialize<T>(key: string, operation: () => Promise<T>): Promise<T> {
   return result;
 }
 
+export interface ReviewOptions {
+  /**
+   * E5.3: extra checks run inside the serialized decision, before the decision is stored. Proposal versions
+   * produced by a learning update (with `lineage`) can only be reviewed with this guard, through their update.
+   */
+  guard?: (decision: ReviewDecision) => Promise<void>;
+}
+
 /** Records an explicit human decision. Never modifies the proposal. */
-export async function recordReview(proposalId: string, body: unknown): Promise<ProposalReview> {
+export async function recordReview(proposalId: string, body: unknown, options: ReviewOptions = {}): Promise<ProposalReview> {
   const input = parseDecision(body);
   const proposal = await loadProposal(proposalId);
+  if (proposal.lineage && !options.guard) {
+    throw new HttpError(409, 'This proposal version was produced by a learning update; review it through that update.');
+  }
   if (proposal.status !== 'draft' || proposal.validationErrors.length > 0) {
     throw new HttpError(409, 'This proposal failed validation and has no reviewable content, so it cannot be approved or rejected.');
   }
@@ -113,6 +124,7 @@ export async function recordReview(proposalId: string, body: unknown): Promise<P
     if (latest?.decision === input.decision) {
       throw new HttpError(409, `The proposal is already ${input.decision}.`);
     }
+    await options.guard?.(input.decision);
     const review: ProposalReview = {
       schemaVersion: 1,
       reviewId: randomUUID(),

@@ -281,6 +281,8 @@ export interface ProposalSummary {
   completedAt: string;
   /** null for failed attempts (no content). */
   title: string | null;
+  /** E5.3 (additive): 1 for proposals generated from an analysis; 2, 3, ... for versions produced by learning updates. */
+  proposalVersion: number;
   counts: {
     modules: number;
     lessons: number;
@@ -293,48 +295,55 @@ export interface ProposalSummary {
   error: LearningProposal['error'];
 }
 
-/** All persisted proposals of an analysis, newest first (including failed attempts). */
+/** Effective review status from the review log; "unavailable" when the log cannot be read (never guessed). */
+export async function reviewStatusFor(p: LearningProposal): Promise<ProposalSummary['reviewStatus']> {
+  try {
+    return reviewStatusOf(p, await reviewRepository.findByProposalId(p.proposalId));
+  } catch (error) {
+    console.error(`[proposals] Review log of proposal ${p.proposalId} is unreadable`, error);
+    return 'unavailable';
+  }
+}
+
+export function summarizeProposal(p: LearningProposal, reviewStatus: ProposalSummary['reviewStatus']): ProposalSummary {
+  const modules = p.content?.modules ?? [];
+  return {
+    proposalId: p.proposalId,
+    analysisId: p.analysisId,
+    documentId: p.documentId,
+    extractionId: p.extractionId,
+    status: p.status,
+    reviewStatus,
+    model: p.model,
+    promptVersion: p.promptVersion,
+    createdAt: p.createdAt,
+    completedAt: p.completedAt,
+    title: p.content?.title ?? null,
+    proposalVersion: p.lineage?.proposalVersion ?? 1,
+    counts: {
+      modules: modules.length,
+      lessons: modules.reduce((n, m) => n + m.lessons.length, 0),
+      activities: modules.reduce((n, m) => n + m.activities.length, 0),
+      assessments: modules.reduce((n, m) => n + m.assessments.length, 0),
+      warnings: p.warnings.length,
+      rejectedItems: p.rejectedItems.length,
+      validationErrors: p.validationErrors.length,
+    },
+    error: p.error,
+  };
+}
+
+/**
+ * All persisted proposals generated from an analysis, newest first (including failed attempts). Versions produced
+ * by learning updates (E5.3) share the root's analysisId but are listed through their updates, not here.
+ */
 export async function listAnalysisProposals(analysisId: string): Promise<ProposalSummary[]> {
   if (!ANALYSIS_ID_PATTERN.test(analysisId)) throw new HttpError(400, 'Malformed analysis id.');
   if (!(await analysisRepository.findById(analysisId))) throw new HttpError(404, 'Analysis not found.');
-  const proposals = await proposalRepository.findByAnalysisId(analysisId);
-  const reviewStatuses = new Map<string, ProposalSummary['reviewStatus']>();
-  for (const p of proposals) {
-    try {
-      reviewStatuses.set(p.proposalId, reviewStatusOf(p, await reviewRepository.findByProposalId(p.proposalId)));
-    } catch (error) {
-      console.error(`[proposals] Review log of proposal ${p.proposalId} is unreadable`, error);
-      reviewStatuses.set(p.proposalId, 'unavailable'); // never guess an approval state
-    }
-  }
-  return proposals
-    .map((p) => {
-      const modules = p.content?.modules ?? [];
-      return {
-        proposalId: p.proposalId,
-        analysisId: p.analysisId,
-        documentId: p.documentId,
-        extractionId: p.extractionId,
-        status: p.status,
-        reviewStatus: reviewStatuses.get(p.proposalId)!,
-        model: p.model,
-        promptVersion: p.promptVersion,
-        createdAt: p.createdAt,
-        completedAt: p.completedAt,
-        title: p.content?.title ?? null,
-        counts: {
-          modules: modules.length,
-          lessons: modules.reduce((n, m) => n + m.lessons.length, 0),
-          activities: modules.reduce((n, m) => n + m.activities.length, 0),
-          assessments: modules.reduce((n, m) => n + m.assessments.length, 0),
-          warnings: p.warnings.length,
-          rejectedItems: p.rejectedItems.length,
-          validationErrors: p.validationErrors.length,
-        },
-        error: p.error,
-      };
-    })
-    .sort((x, y) => y.createdAt.localeCompare(x.createdAt) || y.completedAt.localeCompare(x.completedAt));
+  const proposals = (await proposalRepository.findByAnalysisId(analysisId)).filter((p) => !p.lineage);
+  const summaries: ProposalSummary[] = [];
+  for (const p of proposals) summaries.push(summarizeProposal(p, await reviewStatusFor(p)));
+  return summaries.sort((x, y) => y.createdAt.localeCompare(x.createdAt) || y.completedAt.localeCompare(x.completedAt));
 }
 
 export async function getProposal(proposalId: string): Promise<LearningProposal> {

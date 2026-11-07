@@ -2,7 +2,7 @@ import { useCallback, useId, useRef, useState, type FormEvent } from 'react'
 import { useApiResource } from '../../hooks/useApiResource'
 import { ApiError, errorDetail, isUnreachable } from '../../services/api'
 import type { LearningProposal } from '../../services/proposal.service'
-import { getReviewLog, submitDecision, type ReviewDecision } from '../../services/review.service'
+import { getReviewLog, submitDecision, type DecisionRequest, type ReviewDecision } from '../../services/review.service'
 import { Alert } from '../Alert'
 import { Button } from '../Button'
 import { formatDate } from '../projects/format'
@@ -24,8 +24,34 @@ function counts(proposal: LearningProposal) {
   }
 }
 
-/** Human decision workflow for one proposal. Decisions are only sent on an explicit, confirmed action. */
-export function ReviewPanel({ proposal, onDecided }: { proposal: LearningProposal; onDecided: () => void }) {
+export interface ReviewPanelLabels {
+  approve: string
+  reject: string
+  approvedTitle: string
+  rejectedTitle: string
+  approvalNote: string
+  conflictTitle: string
+}
+
+const DEFAULT_LABELS: ReviewPanelLabels = {
+  approve: 'Aprobar propuesta',
+  reject: 'Rechazar propuesta',
+  approvedTitle: 'Propuesta aprobada',
+  rejectedTitle: 'Propuesta rechazada',
+  approvalNote: 'La aprobación queda registrada con fecha. No publica la propuesta ni modifica su contenido.',
+  conflictTitle: 'La propuesta cambió mientras la revisabas',
+}
+
+/**
+ * Human decision workflow for one proposal. Decisions are only sent on an explicit, confirmed action.
+ * E5.3: `submit` and `labels` let a learning update reuse it (its decisions go through the update endpoint).
+ */
+export function ReviewPanel({ proposal, onDecided, submit: send = (r) => submitDecision(proposal.proposalId, r), labels = DEFAULT_LABELS }: {
+  proposal: LearningProposal
+  onDecided: () => void
+  submit?: (request: DecisionRequest) => Promise<unknown>
+  labels?: ReviewPanelLabels
+}) {
   const load = useCallback((signal: AbortSignal) => getReviewLog(proposal.proposalId, signal), [proposal.proposalId])
   const log = useApiResource(proposal.proposalId, load)
   const [mode, setMode] = useState<ReviewDecision | null>(null)
@@ -65,20 +91,20 @@ export function ReviewPanel({ proposal, onDecided }: { proposal: LearningProposa
     busy.current = true
     setSubmitting(true)
     try {
-      await submitDecision(proposal.proposalId, {
+      await send({
         decision: mode,
         ...(mode === 'rejected' ? { reason: reason.trim() } : { acknowledgedWarnings: acknowledged }),
         ...(comment.trim() ? { comment: comment.trim() } : {}),
         basedOnReviewId: latest?.reviewId ?? null,
       })
-      setFeedback({ tone: 'success', title: mode === 'approved' ? 'Propuesta aprobada' : 'Propuesta rechazada', detail: 'La decisión quedó registrada en el historial de revisión.' })
+      setFeedback({ tone: 'success', title: mode === 'approved' ? labels.approvedTitle : labels.rejectedTitle, detail: 'La decisión quedó registrada en el historial de revisión.' })
       setMode(null)
       onDecided()
     } catch (error) {
       const conflict = error instanceof ApiError && error.status === 409
       setFeedback({
         tone: 'error',
-        title: conflict ? 'La propuesta cambió mientras la revisabas' : isUnreachable(error) ? 'No se pudo conectar con el servidor' : 'No se pudo registrar la decisión',
+        title: conflict ? labels.conflictTitle : isUnreachable(error) ? 'No se pudo conectar con el servidor' : 'No se pudo registrar la decisión',
         detail: conflict ? `${errorDetail(error)} Se recargó su estado actual; revísalo antes de decidir.` : errorDetail(error),
       })
       if (conflict) { setMode(null); onDecided() }
@@ -123,8 +149,8 @@ export function ReviewPanel({ proposal, onDecided }: { proposal: LearningProposa
 
           {log.status === 'ready' && !mode && (
             <div className="flex flex-wrap gap-2">
-              {status !== 'approved' && <Button onClick={() => open('approved')}>{status === 'rejected' ? 'Aprobar (cambiar decisión)' : 'Aprobar propuesta'}</Button>}
-              {status !== 'rejected' && <Button variant="secondary" onClick={() => open('rejected')}>{status === 'approved' ? 'Rechazar (revocar aprobación)' : 'Rechazar propuesta'}</Button>}
+              {status !== 'approved' && <Button onClick={() => open('approved')}>{status === 'rejected' ? 'Aprobar (cambiar decisión)' : labels.approve}</Button>}
+              {status !== 'rejected' && <Button variant="secondary" onClick={() => open('rejected')}>{status === 'approved' ? 'Rechazar (revocar aprobación)' : labels.reject}</Button>}
             </div>
           )}
 
@@ -132,7 +158,7 @@ export function ReviewPanel({ proposal, onDecided }: { proposal: LearningProposa
             <form onSubmit={submit} noValidate className="space-y-3 rounded-md border border-zinc-200 p-4" aria-label={mode === 'approved' ? 'Confirmar aprobación' : 'Confirmar rechazo'} data-decision-form={mode}>
               {mode === 'approved' ? (
                 <>
-                  <p className="text-sm text-zinc-700">La aprobación queda registrada con fecha. No publica la propuesta ni modifica su contenido.</p>
+                  <p className="text-sm text-zinc-700">{labels.approvalNote}</p>
                   {needsAck && (
                     <label className="flex items-start gap-2 text-sm text-zinc-800">
                       <input type="checkbox" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} disabled={submitting} className="mt-0.5 size-4 shrink-0" />

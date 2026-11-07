@@ -3,7 +3,7 @@ import { isUnreachable } from '../../services/api'
 import { UPLOAD_RULES, uploadProjectDocument, type DocumentRecord, type Project } from '../../services/projects.service'
 import { Alert } from '../Alert'
 import { Button } from '../Button'
-import { formatBytes } from './format'
+import { checkFile } from './format'
 
 type UploadState =
   | { kind: 'idle' }
@@ -11,14 +11,6 @@ type UploadState =
   | { kind: 'success'; document: DocumentRecord }
   | { kind: 'error'; filename: string; message: string }
 
-/** Client-side checks mirroring the backend rules (the backend still validates everything). */
-function checkFile(file: File): string | null {
-  const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
-  if (!file.name.includes('.') || !(UPLOAD_RULES.extensions as readonly string[]).includes(extension)) return 'Solo se aceptan archivos PDF o DOCX.'
-  if (file.size === 0) return 'El archivo está vacío.'
-  if (file.size > UPLOAD_RULES.maxBytes) return `El archivo pesa ${formatBytes(file.size)}; el máximo es 15 MB.`
-  return null
-}
 
 /** Uploads one document at a time to the selected project. Documents are not processed automatically. */
 export function DocumentUpload({ project, onUploaded }: { project: Project; onUploaded: (document: DocumentRecord) => void }) {

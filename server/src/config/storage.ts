@@ -15,6 +15,8 @@ export interface StorageConfig {
   documentsFile: string;
   /** JSON collection of learning projects. */
   projectsFile: string;
+  /** Version history of logical documents (see version.repository.ts). */
+  documentVersionsFile: string;
   /** Extraction history per document (see extraction.repository.ts). */
   extractionsDir: string;
   /** One immutable JSON file per claim analysis: <analysisId>.json. */
@@ -23,6 +25,10 @@ export interface StorageConfig {
   proposalsDir: string;
   /** Append-only human review log per proposal: <proposalId>/<reviewId>.json. */
   reviewsDir: string;
+  /** One immutable JSON file per impact analysis: <impactAnalysisId>.json. */
+  impactAnalysesDir: string;
+  /** One immutable JSON file per learning update: <updateId>.json. */
+  learningUpdatesDir: string;
 }
 
 export const storage: StorageConfig = {
@@ -31,8 +37,11 @@ export const storage: StorageConfig = {
   originalsDir: path.join(storageDir, 'originals'),
   documentsFile: path.join(dataDir, 'documents.json'),
   projectsFile: path.join(dataDir, 'projects.json'),
+  documentVersionsFile: path.join(dataDir, 'document-versions.json'),
   extractionsDir: path.join(dataDir, 'extractions'),
   analysesDir: path.join(dataDir, 'analyses'),
   proposalsDir: path.join(dataDir, 'proposals'),
   reviewsDir: path.join(dataDir, 'reviews'),
+  impactAnalysesDir: path.join(dataDir, 'impact-analyses'),
+  learningUpdatesDir: path.join(dataDir, 'learning-updates'),
 };

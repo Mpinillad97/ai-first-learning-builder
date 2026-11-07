@@ -27,13 +27,14 @@ export function UpdatesPage() {
   const docs = documents.data ?? []
   const document = docs.find((d) => d.id === documentParam)
 
-  const chooseProject = (id: string) => setSearchParams({ proyecto: id, documento: null })
-  const chooseDocument = (id: string) => setSearchParams({ proyecto: project!.id, documento: id })
+  const clearView = { desde: null, hasta: null, propuesta: null, impacto: null, actualizacion: null }
+  const chooseProject = (id: string) => setSearchParams({ proyecto: id, documento: null, ...clearView })
+  const chooseDocument = (id: string) => setSearchParams({ proyecto: project!.id, documento: id, ...clearView })
 
   return (
     <PageLayout section={SECTIONS.updates}>
-      <Alert tone="info" title="Sección en preparación">
-        La comparación de versiones y el análisis de impacto aún no están disponibles. Aquí puedes consultar la versión actual de cada documento.
+      <Alert tone="info" title="Versiones y comparación">
+        Sube nuevas versiones de un documento, compara su texto extraído, analiza con IA su impacto en una propuesta de aprendizaje y genera una actualización del contenido. Ningún cambio se aplica sin tu aprobación, y las versiones anteriores de la propuesta se conservan.
       </Alert>
 
       {projects.status === 'loading' && <p role="status" className="text-sm text-zinc-500">Cargando proyectos…</p>}
@@ -54,12 +55,12 @@ export function UpdatesPage() {
           </div>
           <div className="min-w-0">
             {document ? (
-              <UpdatesWorkspace key={document.id} document={document} />
+              <UpdatesWorkspace key={document.id} project={project!} document={document} />
             ) : (
               project && documents.status === 'ready' && docs.length > 0 && (
                 documentParam
                   ? <Alert tone="error" title="Documento no encontrado en este proyecto">Selecciona un documento de la lista.</Alert>
-                  : <EmptyState icon={RefreshIcon} title="Selecciona un documento" description="Elige un documento para consultar su versión actual." />
+                  : <EmptyState icon={RefreshIcon} title="Selecciona un documento" description="Elige un documento para ver sus versiones, subir una nueva y comparar cambios." />
               )
             )}
           </div>

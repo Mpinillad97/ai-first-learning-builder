@@ -1,5 +1,5 @@
 import type { StatusTone } from '../StatusIndicator'
-import type { DocumentStatus } from '../../services/projects.service'
+import { UPLOAD_RULES, type DocumentStatus } from '../../services/projects.service'
 
 const dateFormat = new Intl.DateTimeFormat('es', { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -11,7 +11,16 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export const formatLabel = (extension: string): string => extension.replace(/^\./, '').toUpperCase()
+/** Client-side upload checks mirroring the backend rules (the backend still validates everything). */
+export function checkFile(file: File): string | null {
+  const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+  if (!file.name.includes('.') || !(UPLOAD_RULES.extensions as readonly string[]).includes(extension)) return 'Solo se aceptan archivos PDF o DOCX.'
+  if (file.size === 0) return 'El archivo está vacío.'
+  if (file.size > UPLOAD_RULES.maxBytes) return `El archivo pesa ${formatBytes(file.size)}; el máximo es 15 MB.`
+  return null
+}
+
+export const formatLabel =(extension: string): string => extension.replace(/^\./, '').toUpperCase()
 
 export const DOCUMENT_STATUS: Record<DocumentStatus, { label: string; tone: StatusTone }> = {
   uploaded: { label: 'Cargado, sin procesar', tone: 'neutral' },

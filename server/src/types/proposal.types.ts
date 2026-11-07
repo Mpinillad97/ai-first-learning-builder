@@ -116,6 +116,19 @@ export type ProposalStatus = 'draft' | 'failed';
 
 export const PROPOSAL_SCHEMA_VERSION = 1 as const;
 
+/**
+ * E5.3 (additive): present only on proposal versions produced by a learning update. The root proposal (E3.3)
+ * is version 1 and has no lineage. A version becomes current only when a human approves it.
+ */
+export interface ProposalLineage {
+  rootProposalId: string;
+  parentProposalId: string;
+  /** 2, 3, ... */
+  proposalVersion: number;
+  updateId: string;
+  impactAnalysisId: string;
+}
+
 export interface LearningProposal {
   schemaVersion: 1;
   proposalId: string;
@@ -145,4 +158,6 @@ export interface LearningProposal {
   /** Validation problems that made a generation attempt fail; empty for drafts. */
   validationErrors: string[];
   error: { code: AnalysisErrorCode; message: string } | null;
+  /** E5.3: only on versions produced by a learning update. */
+  lineage?: ProposalLineage;
 }
