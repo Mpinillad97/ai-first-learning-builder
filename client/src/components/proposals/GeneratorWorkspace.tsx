@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { useApiResource } from '../../hooks/useApiResource'
-import { setSearchParams } from '../../router'
+import { setSearchParams, useSearchParam } from '../../router'
 import { ApiError, errorDetail, isUnreachable } from '../../services/api'
 import { listDocumentAnalyses, type AnalysisSummary } from '../../services/analysis.service'
 import type { DocumentRecord } from '../../services/projects.service'
@@ -15,6 +15,9 @@ import { StatusIndicator } from '../StatusIndicator'
 import { ProposalView } from './ProposalView'
 import { REVIEW_STATUS } from './reviewLabels'
 import { AnalysisList } from '../selection/AnalysisList'
+import { FindingsPanel } from '../findings/FindingsPanel'
+import { ProposalDashboard, type GeneratorView } from '../trainings/ProposalDashboard'
+import { TrainingDetail } from '../trainings/TrainingDetail'
 
 /** Why an analysis cannot be used (null when eligible). Mirrors the backend checks; the backend checks again. */
 function ineligibility(a: AnalysisSummary): string | null {
@@ -61,9 +64,15 @@ export function GeneratorWorkspace({ document: doc, projectId, analysisParam, pr
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; title: string; detail: string } | null>(null)
   const busy = useRef(false)
 
+  // E5.5: which detail of the selected proposal is open (default: the management panel).
+  const vista = useSearchParam('vista')
+  const formacion = useSearchParam('formacion')
+  const modo = useSearchParam('modo') === 'revision' ? 'revision' : 'documento'
+  const openView = (view: GeneratorView | null) => setSearchParams({ vista: null, formacion: null, modo: null, ...(view ?? {}) })
+
   const select = (values: Record<string, string | null>) => {
     setFeedback(null)
-    setSearchParams({ proyecto: projectId, documento: doc.id, ...values })
+    setSearchParams({ proyecto: projectId, documento: doc.id, vista: null, formacion: null, modo: null, ...values })
   }
 
   const generate = async () => {
@@ -74,7 +83,7 @@ export function GeneratorWorkspace({ document: doc, projectId, analysisParam, pr
     try {
       const created = await generateProposal(analysisId)
       setFeedback({ tone: 'success', title: 'Propuesta generada como borrador', detail: 'Se cargó desde el registro guardado. Requiere revisión humana antes de cualquier uso.' })
-      setSearchParams({ proyecto: projectId, documento: doc.id, analisis: analysisId, propuesta: created.proposalId })
+      setSearchParams({ proyecto: projectId, documento: doc.id, analisis: analysisId, propuesta: created.proposalId, vista: null, formacion: null, modo: null })
     } catch (error) {
       const recorded = error instanceof Error && /recorded as proposal/.test(error.message)
       setFeedback({ tone: 'error', title: generationErrorTitle(error), detail: `${errorDetail(error)}${recorded ? ' El intento fallido quedó registrado en el historial.' : ''}` })
@@ -87,7 +96,7 @@ export function GeneratorWorkspace({ document: doc, projectId, analysisParam, pr
 
   return (
     <div className="min-w-0 space-y-8">
-      <section aria-labelledby="gen-doc-title" className="space-y-3 rounded-lg border border-zinc-200 bg-white p-4 sm:p-6">
+      <section aria-labelledby="gen-doc-title" className="space-y-3 rounded-lg border border-zinc-200 bg-white p-4 sm:p-6" data-print-hidden>
         <p className="text-xs font-medium tracking-wide text-accent-700 uppercase">Documento seleccionado</p>
         <h2 id="gen-doc-title" className="text-base font-semibold break-words text-zinc-900">{doc.originalFilename}</h2>
         <p className="text-xs text-zinc-500">{formatLabel(doc.extension)} · subido {formatDate(doc.createdAt)}</p>
@@ -109,7 +118,7 @@ export function GeneratorWorkspace({ document: doc, projectId, analysisParam, pr
       </section>
 
       {analysis && (
-        <section aria-labelledby="gen-title" className="space-y-4">
+        <section aria-labelledby="gen-title" className="space-y-4" data-print-hidden>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <h2 id="gen-title" className="text-base font-semibold text-zinc-900">Propuesta de aprendizaje</h2>
@@ -133,7 +142,21 @@ export function GeneratorWorkspace({ document: doc, projectId, analysisParam, pr
         <div>
           {proposal.status === 'loading' && <p role="status" className="text-sm text-zinc-500">Cargando propuesta guardada…</p>}
           {proposal.status === 'error' && <Alert tone="error" title="No se pudo cargar la propuesta" actions={<Button variant="secondary" onClick={proposal.reload}>Reintentar</Button>}>{errorDetail(proposal.error)}</Alert>}
-          {proposal.status === 'ready' && proposal.data && <ProposalView proposal={proposal.data} reviewStatus={proposalList.find((p) => p.proposalId === proposalId)?.reviewStatus} />}
+          {proposal.status === 'ready' && proposal.data && (() => {
+            const data = proposal.data
+            const summary = proposalList.find((p) => p.proposalId === proposalId)
+            // Failed attempts have no learning content: their validation errors are shown directly.
+            if (data.status !== 'draft' || !data.content) return <ProposalView proposal={data} reviewStatus={summary?.reviewStatus} />
+            if (vista === 'propuesta') return (
+              <div className="space-y-4">
+                <Button variant="secondary" onClick={() => openView(null)}>← Volver al panel de la propuesta</Button>
+                <ProposalView proposal={data} reviewStatus={summary?.reviewStatus} />
+              </div>
+            )
+            if (vista === 'hallazgos') return <FindingsPanel analysisId={data.analysisId} proposalId={data.proposalId} onBack={() => openView(null)} />
+            if (vista === 'formacion' && formacion) return <TrainingDetail key={formacion} trainingId={formacion} mode={modo} onMode={(m) => openView({ vista: 'formacion', formacion, modo: m })} onBack={() => openView(null)} />
+            return <ProposalDashboard key={data.proposalId} proposal={data} summary={summary} projectId={projectId} documentId={doc.id} onOpen={openView} />
+          })()}
         </div>
       )}
     </div>

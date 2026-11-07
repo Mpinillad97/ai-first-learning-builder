@@ -5,6 +5,7 @@ import { errorDetail } from '../../services/api'
 import { listDocumentAnalyses } from '../../services/analysis.service'
 import type { DocumentRecord } from '../../services/projects.service'
 import { getProposal, listAnalysisProposals } from '../../services/proposal.service'
+import { listFindings } from '../../services/findings.service'
 import { SECTIONS } from '../../navigation'
 import { Alert } from '../Alert'
 import { Button, ButtonLink } from '../Button'
@@ -109,10 +110,34 @@ export function ReviewWorkspace({ document: doc, projectId, analysisParam, propo
           {proposal.status === 'ready' && proposal.data && (
             <>
               <ReviewPanel key={proposal.data.proposalId} proposal={proposal.data} onDecided={proposals.reload} />
+              <ReviewFollowUp proposalId={proposal.data.proposalId} analysisId={proposal.data.analysisId} approved={proposalSummary?.reviewStatus === 'approved'}
+                generatorUrl={`${SECTIONS.generator.path}?proyecto=${projectId}&documento=${doc.id}&analisis=${proposal.data.analysisId}&propuesta=${proposal.data.proposalId}`} />
               <ProposalView proposal={proposal.data} reviewStatus={proposalSummary?.reviewStatus} />
             </>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+/** E5.5: open findings stay visible during review; approval leads to the Sales and CE trainings. */
+function ReviewFollowUp({ proposalId, analysisId, approved, generatorUrl }: { proposalId: string; analysisId: string; approved: boolean; generatorUrl: string }) {
+  const load = useCallback((signal: AbortSignal) => listFindings(analysisId, proposalId, signal), [analysisId, proposalId])
+  const findings = useApiResource(proposalId, load)
+  const counts = findings.data?.counts
+  return (
+    <div className="space-y-3" data-review-followup>
+      {counts && (
+        <p className="rounded-md border border-amber-200 bg-amber-50/50 px-4 py-2 text-sm text-zinc-800" data-review-findings>
+          {plural(counts.open, 'hallazgo pendiente', 'hallazgos pendientes')} ({counts.unresolved} sin resolver · {counts.pending_validation} pendientes de validación) ·{' '}
+          <a className="font-medium text-accent-700 underline" href={`${generatorUrl}&vista=hallazgos`}>Gestionar hallazgos</a>
+        </p>
+      )}
+      {approved && (
+        <Alert tone="success" title="Formaciones Sales y Customer Experience" actions={<ButtonLink to={generatorUrl}>Ver formaciones <ArrowRightIcon /></ButtonLink>}>
+          Al aprobar la propuesta se generan automáticamente sus dos formaciones como borradores. Cada una requiere su propia revisión.
+        </Alert>
       )}
     </div>
   )

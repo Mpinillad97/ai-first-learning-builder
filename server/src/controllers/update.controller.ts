@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { generateTrainingsInBackground } from '../services/training.service.js';
 import { generateLearningUpdate, getLearningUpdate, getProposalVersions, listLearningUpdates, reviewLearningUpdate } from '../services/update.service.js';
 
 type Params = { id: string; documentId: string };
@@ -17,7 +18,10 @@ export async function getLearningUpdateById(req: Request<{ updateId: string }>, 
 }
 
 export async function postLearningUpdateReview(req: Request<Params & { updateId: string }>, res: Response): Promise<void> {
-  res.status(201).json(await reviewLearningUpdate(req.params.id, req.params.documentId, req.params.updateId, req.body));
+  const review = await reviewLearningUpdate(req.params.id, req.params.documentId, req.params.updateId, req.body);
+  // E5.5: an approved update candidate (new proposal version) produces its updated Sales and CE trainings.
+  if (review.decision === 'approved') generateTrainingsInBackground(review.proposalId);
+  res.status(201).json(review);
 }
 
 export async function getProposalVersionList(req: Request<{ proposalId: string }>, res: Response): Promise<void> {

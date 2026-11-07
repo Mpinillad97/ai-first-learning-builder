@@ -2,6 +2,7 @@ import { useCallback, useId, useRef, useState, type FormEvent } from 'react'
 import { useApiResource } from '../../hooks/useApiResource'
 import { ApiError, errorDetail, isUnreachable } from '../../services/api'
 import type { LearningProposal } from '../../services/proposal.service'
+import type { ReviewLog } from '../../services/review.service'
 import { getReviewLog, submitDecision, type DecisionRequest, type ReviewDecision } from '../../services/review.service'
 import { Alert } from '../Alert'
 import { Button } from '../Button'
@@ -12,9 +13,14 @@ import { REVIEW_STATUS } from './reviewLabels'
 
 const REASON_MAX = 2000
 
-function counts(proposal: LearningProposal) {
+/** E5.5: anything reviewable with the E4.5 rules (a proposal or an audience training). */
+export type Reviewable = Pick<LearningProposal, 'proposalId' | 'status' | 'validationErrors' | 'warnings' | 'rejectedItems'> & {
+  content: { modules: NonNullable<LearningProposal['content']>['modules']; productKnowledge?: NonNullable<LearningProposal['content']>['modules'][number]['lessons'][number]['content'] } | null
+}
+
+function counts(proposal: Reviewable) {
   const modules = proposal.content?.modules ?? []
-  const items = modules.flatMap((m) => m.lessons.flatMap((l) => l.content))
+  const items = [...modules.flatMap((m) => m.lessons.flatMap((l) => l.content)), ...(proposal.content?.productKnowledge ?? [])]
   return {
     warnings: proposal.warnings.length,
     pending: items.filter((c) => c.kind === 'pending_validation').length,
@@ -46,13 +52,15 @@ const DEFAULT_LABELS: ReviewPanelLabels = {
  * Human decision workflow for one proposal. Decisions are only sent on an explicit, confirmed action.
  * E5.3: `submit` and `labels` let a learning update reuse it (its decisions go through the update endpoint).
  */
-export function ReviewPanel({ proposal, onDecided, submit: send = (r) => submitDecision(proposal.proposalId, r), labels = DEFAULT_LABELS }: {
-  proposal: LearningProposal
+export function ReviewPanel({ proposal, onDecided, submit: send = (r) => submitDecision(proposal.proposalId, r), labels = DEFAULT_LABELS, loadLog }: {
+  proposal: Reviewable
   onDecided: () => void
   submit?: (request: DecisionRequest) => Promise<unknown>
   labels?: ReviewPanelLabels
+  /** E5.5: where the review log is read from (defaults to the proposal's log). Must be memoized. */
+  loadLog?: (signal: AbortSignal) => Promise<ReviewLog>
 }) {
-  const load = useCallback((signal: AbortSignal) => getReviewLog(proposal.proposalId, signal), [proposal.proposalId])
+  const load = useCallback((signal: AbortSignal) => (loadLog ? loadLog(signal) : getReviewLog(proposal.proposalId, signal)), [proposal.proposalId, loadLog])
   const log = useApiResource(proposal.proposalId, load)
   const [mode, setMode] = useState<ReviewDecision | null>(null)
   const [acknowledged, setAcknowledged] = useState(false)

@@ -45,7 +45,7 @@ export function LearningGeneratorPage() {
 
       {projects.status === 'ready' && list.length > 0 && (
         <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
-          <div className="min-w-0 space-y-4">
+          <div className="min-w-0 space-y-4" data-print-hidden>
             <ProjectSelect id="generator-project" projects={list} selectedId={project?.id ?? null} onChange={chooseProject} />
             {!project && projectParam && <Alert tone="error" title="Proyecto no encontrado">Selecciona un proyecto de la lista.</Alert>}
             {project && <DocumentPicker project={project} documents={documents} selectedId={document?.id ?? null} onSelect={chooseDocument} listLabel="Documentos del proyecto para generar" />}

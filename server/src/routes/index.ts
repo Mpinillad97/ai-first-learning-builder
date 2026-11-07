@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { analysisRouter } from './analysis.routes.js';
 import { documentRouter } from './document.routes.js';
+import { findingRouter } from './finding.routes.js';
 import { healthRouter } from './health.routes.js';
 import { impactRouter } from './impact.routes.js';
 import { projectRouter } from './project.routes.js';
 import { proposalRouter } from './proposal.routes.js';
 import { reviewRouter } from './review.routes.js';
 import { sourceRouter } from './source.routes.js';
+import { trainingRouter } from './training.routes.js';
 import { updateRouter } from './update.routes.js';
 import { versionRouter } from './version.routes.js';
 
@@ -22,6 +24,8 @@ apiRouter.use(reviewRouter);
 apiRouter.use(versionRouter);
 apiRouter.use(impactRouter);
 apiRouter.use(updateRouter);
+apiRouter.use(trainingRouter);
+apiRouter.use(findingRouter);
 
 export const routes = Router();
 

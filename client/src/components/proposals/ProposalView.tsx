@@ -24,7 +24,7 @@ const WARNING: Record<string, string> = {
 const ReviewFlag = () => <StatusIndicator tone="warning" label="Requiere revisión" />
 
 /** Expandable verified sources for the claims an element relies on (resolved via GET /api/sources/:id). */
-function Evidence({ claimIds, references }: { claimIds: string[]; references: ProposalSourceReference[] }) {
+export function Evidence({ claimIds, references }: { claimIds: string[]; references: ProposalSourceReference[] }) {
   const [open, setOpen] = useState(false)
   const panelId = useId()
   const refs = references.filter((r) => claimIds.includes(r.claimId))

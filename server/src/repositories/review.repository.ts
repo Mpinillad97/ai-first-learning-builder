@@ -16,14 +16,19 @@ const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\
 const FIELDS = ['schemaVersion', 'reviewId', 'proposalId', 'analysisId', 'documentId', 'decision', 'reason', 'comment', 'warningsAcknowledged',
   'warningCount', 'pendingValidationItemCount', 'previousReviewId', 'decidedAt'];
 
-function validateReview(value: unknown, proposalId: string, reviewId?: string): string[] {
+/** E5.5: the same log stores training reviews, keyed by "trainingId" (proposalId is then the training's source proposal). */
+export type ReviewSubjectField = 'proposalId' | 'trainingId';
+
+function validateReview(value: unknown, subjectId: string, reviewId?: string, subjectField: ReviewSubjectField = 'proposalId'): string[] {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return ['must be an object'];
   const r = value as Record<string, unknown>;
   const errors: string[] = [];
-  for (const key of Object.keys(r)) if (!FIELDS.includes(key)) errors.push(`unknown field "${key}"`);
+  const fields = subjectField === 'trainingId' ? [...FIELDS, 'trainingId'] : FIELDS;
+  for (const key of Object.keys(r)) if (!fields.includes(key)) errors.push(`unknown field "${key}"`);
   if (r.schemaVersion !== 1) errors.push('"schemaVersion" must be 1');
   if (typeof r.reviewId !== 'string' || !UUID.test(r.reviewId) || (reviewId !== undefined && r.reviewId !== reviewId)) errors.push('"reviewId" must match its file name');
-  if (r.proposalId !== proposalId) errors.push('"proposalId" must match its directory');
+  if (r[subjectField] !== subjectId) errors.push(`"${subjectField}" must match its directory`);
+  if (typeof r.proposalId !== 'string' || !UUID.test(r.proposalId)) errors.push('"proposalId" must be a UUID');
   for (const f of ['analysisId', 'documentId']) if (typeof r[f] !== 'string' || !r[f]) errors.push(`"${f}" must be a non-empty string`);
   if (r.decision !== 'approved' && r.decision !== 'rejected') errors.push('"decision" must be "approved" or "rejected"');
   const text = (v: unknown) => v === null || (typeof v === 'string' && v.trim().length > 0 && v.length <= REVIEW_TEXT_LIMIT);
@@ -44,12 +49,13 @@ function validateReview(value: unknown, proposalId: string, reviewId?: string): 
  * unreadable (fail closed): an approval state is never derived from partial data.
  */
 export class ReviewRepository {
-  constructor(private readonly dir: string = storage.reviewsDir) {}
+  constructor(private readonly dir: string = storage.reviewsDir, private readonly subjectField: ReviewSubjectField = 'proposalId') {}
 
   async create(review: ProposalReview): Promise<void> {
-    const errors = validateReview(review, review.proposalId);
+    const subjectId = (review as unknown as Record<string, string>)[this.subjectField]!;
+    const errors = validateReview(review, subjectId, undefined, this.subjectField);
     if (errors.length > 0) throw new ReviewRepositoryError(`Refusing to store invalid review: ${errors.join('; ')}`);
-    const filePath = path.join(this.proposalDir(review.proposalId), `${review.reviewId}.json`);
+    const filePath = path.join(this.proposalDir(subjectId), `${review.reviewId}.json`);
     try {
       await createJsonExclusive(filePath, review);
     } catch (error) {
@@ -78,7 +84,7 @@ export class ReviewRepository {
       } catch (error) {
         throw new ReviewRepositoryError(`Review "${filePath}" is unreadable or contains invalid JSON. The file was left unchanged.`, { cause: error });
       }
-      const errors = validateReview(parsed, proposalId, reviewId);
+      const errors = validateReview(parsed, proposalId, reviewId, this.subjectField);
       if (errors.length > 0) throw new ReviewRepositoryError(`Review "${filePath}" is invalid: ${errors.join('; ')}. The file was left unchanged.`);
       reviews.push(parsed as ProposalReview);
     }
@@ -110,3 +116,5 @@ export class ReviewRepository {
 }
 
 export const reviewRepository = new ReviewRepository();
+/** E5.5: review logs of audience trainings: <trainingReviewsDir>/<trainingId>/<reviewId>.json. */
+export const trainingReviewRepository = new ReviewRepository(storage.trainingReviewsDir, 'trainingId');

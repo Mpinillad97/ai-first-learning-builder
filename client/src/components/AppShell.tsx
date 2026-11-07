@@ -64,7 +64,7 @@ export function AppShell({ pathname, children }: { pathname: string; children: R
       </aside>
 
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 md:hidden">
+      <div data-print-hidden className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 md:hidden">
         <Brand />
         <button
           ref={menuButtonRef}

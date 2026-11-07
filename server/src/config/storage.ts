@@ -29,6 +29,12 @@ export interface StorageConfig {
   impactAnalysesDir: string;
   /** One immutable JSON file per learning update: <updateId>.json. */
   learningUpdatesDir: string;
+  /** E5.5: one immutable JSON file per audience training: <trainingId>.json. */
+  trainingsDir: string;
+  /** E5.5: append-only human review log per training: <trainingId>/<reviewId>.json. */
+  trainingReviewsDir: string;
+  /** E5.5: append-only human decisions on findings, per analysis: <analysisId>/<decisionId>.json. */
+  findingDecisionsDir: string;
 }
 
 export const storage: StorageConfig = {
@@ -44,4 +50,7 @@ export const storage: StorageConfig = {
   reviewsDir: path.join(dataDir, 'reviews'),
   impactAnalysesDir: path.join(dataDir, 'impact-analyses'),
   learningUpdatesDir: path.join(dataDir, 'learning-updates'),
+  trainingsDir: path.join(dataDir, 'trainings'),
+  trainingReviewsDir: path.join(dataDir, 'training-reviews'),
+  findingDecisionsDir: path.join(dataDir, 'finding-decisions'),
 };

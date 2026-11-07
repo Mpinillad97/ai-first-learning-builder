@@ -14,6 +14,8 @@ export interface ProposalReview {
   schemaVersion: 1;
   reviewId: string;
   proposalId: string;
+  /** E5.5: only on training reviews (the proposalId is then the training's source proposal). */
+  trainingId?: string;
   analysisId: string;
   documentId: string;
   decision: ReviewDecision;

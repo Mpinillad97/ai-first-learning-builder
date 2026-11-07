@@ -23,3 +23,19 @@
     @apply outline-2 outline-offset-2 outline-accent-600;
   }
 }
+
+/* E5.5: printing (or "Save as PDF") a training document shows only the document. */
+@media print {
+  aside,
+  [data-print-hidden] {
+    display: none !important;
+  }
+
+  main {
+    padding-left: 0 !important;
+  }
+
+  body {
+    background: white;
+  }
+}

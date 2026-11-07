@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError } from '../middleware/error.middleware.js';
 import { PROPOSAL_ID_PATTERN, proposalRepository } from '../repositories/proposal.repository.js';
-import { reviewRepository } from '../repositories/review.repository.js';
-import type { LearningProposal } from '../types/proposal.types.js';
+import { reviewRepository, type ReviewRepository } from '../repositories/review.repository.js';
+import type { LearningProposal, Module } from '../types/proposal.types.js';
 import { REVIEW_TEXT_LIMIT, type ProposalReview, type ReviewDecision, type ReviewStatus } from '../types/review.types.js';
 
 /**
@@ -10,7 +10,7 @@ import { REVIEW_TEXT_LIMIT, type ProposalReview, type ReviewDecision, type Revie
  * never modified. Decisions only come from an explicit POST (there is no automatic approval anywhere).
  */
 
-export function pendingValidationItemCount(proposal: LearningProposal): number {
+export function pendingValidationItemCount(proposal: { content: { modules: Module[] } | null }): number {
   return (proposal.content?.modules ?? []).reduce((n, m) => n + m.lessons.reduce((k, l) => k + l.content.filter((c) => c.kind === 'pending_validation').length, 0), 0);
 }
 
@@ -39,7 +39,7 @@ export async function getReviewLog(proposalId: string): Promise<ReviewLog> {
   return { proposalId, reviewStatus: reviewStatusOf(proposal, reviews), reviews };
 }
 
-interface DecisionInput {
+export interface DecisionInput {
   decision: ReviewDecision;
   reason: string | null;
   comment: string | null;
@@ -49,7 +49,7 @@ interface DecisionInput {
 
 const ALLOWED = ['decision', 'reason', 'comment', 'acknowledgedWarnings', 'basedOnReviewId'];
 
-function parseDecision(body: unknown): DecisionInput {
+export function parseDecision(body: unknown): DecisionInput {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) throw new HttpError(400, 'Invalid review: send a JSON object.');
   const b = body as Record<string, unknown>;
   const problems: string[] = [];
@@ -106,31 +106,53 @@ export async function recordReview(proposalId: string, body: unknown, options: R
   if (proposal.lineage && !options.guard) {
     throw new HttpError(409, 'This proposal version was produced by a learning update; review it through that update.');
   }
-  if (proposal.status !== 'draft' || proposal.validationErrors.length > 0) {
-    throw new HttpError(409, 'This proposal failed validation and has no reviewable content, so it cannot be approved or rejected.');
+  return recordDecision(input, {
+    key: proposalId,
+    repository: reviewRepository,
+    reviewable: proposal.status === 'draft' && proposal.validationErrors.length === 0,
+    subject: 'proposal',
+    warningCount: proposal.warnings.length,
+    pendingCount: pendingValidationItemCount(proposal),
+    fields: { proposalId, analysisId: proposal.analysisId, documentId: proposal.documentId },
+  }, options);
+}
+
+/** E5.5: a reviewable item (a proposal or an audience training) and where its decisions are logged. */
+export interface DecisionSubject {
+  key: string;
+  repository: ReviewRepository;
+  reviewable: boolean;
+  subject: 'proposal' | 'training';
+  warningCount: number;
+  pendingCount: number;
+  /** Identity fields stored on each review record. */
+  fields: { proposalId: string; analysisId: string; documentId: string; trainingId?: string };
+}
+
+/** Shared E4.5 decision rules: acknowledgment, optimistic concurrency (basedOnReviewId), serialized append-only log. */
+export async function recordDecision(input: DecisionInput, subject: DecisionSubject, options: ReviewOptions = {}): Promise<ProposalReview> {
+  if (!subject.reviewable) {
+    throw new HttpError(409, `This ${subject.subject} failed validation and has no reviewable content, so it cannot be approved or rejected.`);
   }
-  const warningCount = proposal.warnings.length;
-  const pendingCount = pendingValidationItemCount(proposal);
+  const { warningCount, pendingCount } = subject;
   if (input.decision === 'approved' && (warningCount > 0 || pendingCount > 0) && !input.acknowledgedWarnings) {
-    throw new HttpError(400, `Invalid review: approving requires acknowledging the proposal's ${warningCount} warning(s) and ${pendingCount} pending-validation item(s) (acknowledgedWarnings: true).`);
+    throw new HttpError(400, `Invalid review: approving requires acknowledging the ${subject.subject}'s ${warningCount} warning(s) and ${pendingCount} pending-validation item(s) (acknowledgedWarnings: true).`);
   }
 
-  return serialize(proposalId, async () => {
-    const reviews = await reviewRepository.findByProposalId(proposalId);
+  return serialize(`${subject.subject}:${subject.key}`, async () => {
+    const reviews = await subject.repository.findByProposalId(subject.key);
     const latest = reviews[0] ?? null;
     if ((latest?.reviewId ?? null) !== input.basedOnReviewId) {
-      throw new HttpError(409, 'The proposal was reviewed by someone else in the meantime. Reload its review history before deciding.');
+      throw new HttpError(409, `The ${subject.subject} was reviewed by someone else in the meantime. Reload its review history before deciding.`);
     }
     if (latest?.decision === input.decision) {
-      throw new HttpError(409, `The proposal is already ${input.decision}.`);
+      throw new HttpError(409, `The ${subject.subject} is already ${input.decision}.`);
     }
     await options.guard?.(input.decision);
     const review: ProposalReview = {
       schemaVersion: 1,
       reviewId: randomUUID(),
-      proposalId,
-      analysisId: proposal.analysisId,
-      documentId: proposal.documentId,
+      ...subject.fields,
       decision: input.decision,
       reason: input.decision === 'rejected' ? input.reason : null,
       comment: input.comment,
@@ -140,7 +162,7 @@ export async function recordReview(proposalId: string, body: unknown, options: R
       previousReviewId: latest?.reviewId ?? null,
       decidedAt: new Date().toISOString(),
     };
-    await reviewRepository.create(review);
+    await subject.repository.create(review);
     return review;
   });
 }

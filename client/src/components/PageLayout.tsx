@@ -6,7 +6,7 @@ import { PageHeader } from './PageHeader'
 export function PageLayout({ section, actions, children }: { section: SectionDefinition; actions?: ReactNode; children: ReactNode }) {
   return (
     <div className="space-y-8">
-      <PageHeader title={section.label} description={section.description} icon={section.icon} actions={actions} />
+      <div data-print-hidden><PageHeader title={section.label} description={section.description} icon={section.icon} actions={actions} /></div>
       {children}
     </div>
   )

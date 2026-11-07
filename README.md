@@ -195,13 +195,43 @@ A learning update asks the AI (shared OpenAI client, strict structured output, p
 - **Next cycle.** An approved version belongs to the new document version: it is offered as a compatible proposal of that version for E5.2, and its updates produce version 3, 4, …
 - **Storage.** One immutable file per update in `server/data/learning-updates/<updateId>.json`; candidates in `server/data/proposals/`; decisions in `server/data/reviews/<candidateProposalId>/`.
 
+### Audience trainings (Sales and Customer Experience)
+
+Every approved proposal — a root proposal or an approved learning-update candidate — produces two independent trainings: **Sales** and **Customer Experience**. There is no audience selector. Generation starts automatically, in the background, when the approval is recorded (if `OPENAI_API_KEY` is set), and can also be triggered from the generator.
+
+| Endpoint | Description |
+| -------- | ----------- |
+| `GET /api/competency-profiles` | The two reusable, product-independent competency profiles (`profiles@1`). |
+| `GET /api/proposals/:proposalId/trainings` | State per audience (`not_generated`, `generating`, `generated`, `failed`), current training, every attempt and whether a (re)generation is allowed. |
+| `POST /api/proposals/:proposalId/trainings` | Body `{}` or `{ audiences: ["sales" \| "customer_experience"] }`. Generates the missing audiences of an approved proposal (`409` otherwise; `503` without AI). |
+| `GET /api/trainings/:trainingId` | One training, with its review status and source proposal. |
+| `GET /api/trainings/:trainingId/document` | The training as a structured Markdown deliverable; `?download=1` sends it as an attachment. |
+| `GET` / `POST /api/trainings/:trainingId/reviews` | Human review with the E4.5 rules (`basedOnReviewId`, reason to reject, `acknowledgedWarnings`). Approval requires the source proposal to still be approved. |
+
+- **Profiles, not syllabi.** The model selects only the profile competencies the claims give a basis for (each with a rationale and claim ids) and lists the rest as excluded. The prompt (`training@1`) names no product.
+- **Same evidence rules as proposals.** Trainings use only the approved proposal's claims (re-verified against the stored extractions). Modules, lessons, activities and assessments go through the E3.3 validator; competencies, outcomes and product knowledge are validated too. Invalid items are rejected (`rejectedItems`); critical errors store a `failed` attempt.
+- **Independence and retries.** Audiences are generated in parallel. A failure in one never affects the other. Only audiences without a training, whose last attempt failed, or whose training was rejected can be (re)generated, so nothing is duplicated or overwritten. Requests for the same proposal are serialized.
+- **Lineage.** `lineage` holds `rootProposalId`, `proposalVersion`, a per-audience `trainingVersion` and `previousTrainingId`. When an update candidate is approved, each audience's new training links to that audience's previous training, which is passed to the model for continuity. Earlier trainings and their approvals are kept.
+- **Storage.** `server/data/trainings/<trainingId>.json`; reviews in `server/data/training-reviews/<trainingId>/`.
+
+### Findings management
+
+| Endpoint | Description |
+| -------- | ----------- |
+| `GET /api/analyses/:analysisId/findings?proposalId=` | Contradictions, documentation gaps, pending-validation claims and analysis warnings, plus the proposal's own warnings when `proposalId` is given. Each finding includes its involved claims, source passages, current status, decision history, and the proposal/training elements that use its claims. |
+| `POST /api/analyses/:analysisId/findings/:findingId/decisions` | Body `{ status, explanation?, question?, evidence?, basedOnDecisionId }`. |
+
+- **Statuses.** `resolved_with_evidence` requires an explanation and an `evidence: { sourceId, quote }` whose quote the backend finds verbatim in the source. `pending_validation` requires the open question. `unresolved` keeps the finding open.
+- **Human decisions.** Decisions are append-only, one chain per finding, with optimistic concurrency. They are stored as human decisions, separate from documentary evidence. They never modify documents, analyses, proposals or trainings: to change content, generate a new proposal or update and approve it.
+- **Storage.** `server/data/finding-decisions/<analysisId>/<decisionId>.json`.
+
 ### Local storage
 
 The backend keeps runtime data on the local filesystem, inside `server/`:
 
 | Directory                   | Contents                                  |
 | --------------------------- | ----------------------------------------- |
-| `server/data/`              | Application data as JSON files (projects, documents, document versions, extraction history, analyses, proposals, reviews) |
+| `server/data/`              | Application data as JSON files (projects, documents, document versions, extraction history, analyses, proposals, reviews, impact analyses, learning updates, trainings, finding decisions) |
 | `server/storage/originals/` | Original uploaded documents, unmodified   |
 
 These directories are created automatically when the server starts, and existing files are never deleted or overwritten. If they cannot be created, the server exits with an error instead of starting. Paths are resolved relative to the `server/` folder, so they do not depend on the directory you start the server from.

@@ -40,7 +40,7 @@ type V2Analysis = Analysis & Required<Pick<Analysis, 'contradictions' | 'documen
  * Re-verifies a claim's stored evidence against the analysis' exact extraction: each source id must belong to
  * it, resolve, and still contain the quote at the stored offsets. Returns the problems found.
  */
-async function reverifyClaim(claim: Claim, analysis: Analysis): Promise<string[]> {
+export async function reverifyClaim(claim: Claim, analysis: Analysis): Promise<string[]> {
   if (claim.evidence.length === 0) return ['has no evidence'];
   const problems: string[] = [];
   for (const ev of claim.evidence) {
@@ -60,7 +60,7 @@ async function reverifyClaim(claim: Claim, analysis: Analysis): Promise<string[]
   return problems;
 }
 
-function warning(type: WarningType, message: string, related: Partial<Pick<ProposalWarning, 'relatedClaimIds' | 'relatedContradictionIds' | 'relatedGapIds'>> = {}) {
+export function warning(type: WarningType, message: string, related: Partial<Pick<ProposalWarning, 'relatedClaimIds' | 'relatedContradictionIds' | 'relatedGapIds'>> = {}) {
   return {
     type,
     message,
@@ -203,7 +203,7 @@ export async function generateProposal(
 }
 
 /** Builds the stored proposal: backend ids, backend-derived evidence, merged warnings, status draft. */
-function assemble(
+export function assemble(
   base: Omit<LearningProposal, 'model' | 'completedAt' | 'status' | 'content' | 'sourceReferences' | 'warnings' | 'rejectedItems' | 'validationErrors' | 'error'>,
   model: string,
   validated: ValidatedProposal,

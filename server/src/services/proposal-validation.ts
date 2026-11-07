@@ -313,7 +313,7 @@ export function validateProposal(data: unknown, ctx: ValidationContext): Proposa
 }
 
 /** Item-level evidence rules for lesson content. */
-function contentItemIssues(
+export function contentItemIssues(
   item: ContentItem,
   statusOf: (id: string) => ClaimStatus | undefined,
   quotesOf: (ids: string[]) => string[],
